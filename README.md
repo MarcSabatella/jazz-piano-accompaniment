@@ -29,3 +29,7 @@ Here is an example of its output:
 
 ![Jazz piano accompaniment screenshot](screenshot.png)
 
+## Credits
+
+- Created by Marc Sabatella ([Outside Shore Music](https://outsideshore.com)).
+- Developed with assistance from Google Gemini.
