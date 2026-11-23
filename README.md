@@ -14,7 +14,13 @@ and should produce much more pleasing results than the built-in chord symbol pla
 - **Color tones:** Context-appropriate sixths, ninths, fourths, and altered extensions like b9, #11, and b13 are added automatically
 - **Smooth voice leading:** Chords are voiced in ways that connect inner voices smoothly where possible
 - **Inner voice motion:** Chords that last more than a couple of beats include moving lines in inner voices (or additional bass notes) for harmonic and rhythmic interest
-- **Playability:** Even with the melody on top, neither hand will often need to stretch more than an octave.
+- **Playability:** Even with the melody on top, neither hand will generally need to stretch more than an octave.
+
+## Download
+
+The ZIP file for the current release is available for download in the Releases section of the GitHub repository:
+
+**[** Download **](https://github.com/MarcSabatella/jazz-piano-accompaniment/releases)**
 
 ## Screenshot
 
