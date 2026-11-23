@@ -3,8 +3,10 @@ import MuseScore 3.0
 
 MuseScore {
     menuPath: "Plugins.Jazz Piano Accompaniment"
+    title: "Jazz Piano Accompaniment"
     description: "Realizes lead sheet chord symbols into a 2-hand piano voicing accompaniment."
-    version: "1.0.10"
+    thumbnailName: "thumbnail.png"
+    version: "1.0.13"
 
     // --- TPC & Pitch Helpers ---
 
@@ -56,7 +58,7 @@ MuseScore {
         }
 
         var isDim = /^(dim|o|°)/.test(suffix);
-        var isAug = /^(\+|aug)/.test(suffix);
+        var isAug = /(^|[^a-zA-Z])aug/i.test(suffix) || /\+/.test(suffix);
         var isMajQual = /^(maj|ma(?!j)|M(?=[6791Δt^]|$)|Δ|t(?=[6791]|$)|\^)/.test(suffix);
         var isMin = !isDim && !isMajQual && /^(m(?!a)|min|mi|-)/.test(suffix);
         var isSus = /sus/.test(suffix);
@@ -71,18 +73,21 @@ MuseScore {
         var hasSharp5 = isAug || /(#5|♯5|\+5)/.test(extPart);
         var isAlt = /alt/.test(suffix);
 
-        var isSixthChord = /(^|[^b#♯♭+-])6/.test(extPart) && !/7|11|13/.test(extPart);
+        var isAddChord = /add/i.test(extPart);
+        var extNoAdd = extPart.replace(/add\s*[#b♯♭+-]?\d+/gi, "");
+
+        var isSixthChord = /(^|[^b#♯♭+-])6/.test(extNoAdd) && !/7|11|13/.test(extNoAdd);
 
         var hasFlat9 = /(b9|♭9|-9)/.test(extPart);
         var hasSharp9 = /(#9|♯9|\+9)/.test(extPart);
-        var hasNat9 = !hasFlat9 && !hasSharp9 && /(^|[^0-9])9/.test(extPart);
+        var hasNat9 = !hasFlat9 && !hasSharp9 && /(^|[^0-9])(9|2)/.test(extPart);
         var hasSharp11 = /(#11|♯11|\+11)/.test(extPart);
-        var hasNat11 = !hasSharp11 && /11/.test(extPart);
+        var hasNat11 = !hasSharp11 && /(11|add\s*4)/i.test(extPart);
         var hasFlat13 = /(b13|♭13|-13|b6|♭6|-6)/.test(extPart);
         var hasNat13 = !hasFlat13 && /13/.test(extPart);
 
         var explicitSeventh = null;
-        if (!isDim && (/(maj|ma(?!j)|M(?=[6791]|$)|Δ|(^|[^a-zA-Z])t(?=[6791]|$)|\^|j7)/.test(extPart) || isMajQual)) {
+        if (!isDim && (/(maj|ma(?!j)|M(?=[6791]|$)|Δ|(^|[^a-zA-Z])t(?=[6791]|$)|\^|j7)/.test(extNoAdd) || isMajQual)) {
             explicitSeventh = "maj7";
         } else if (/dim7|o7|°7/.test(suffix)) {
             explicitSeventh = "dim7";
@@ -92,7 +97,7 @@ MuseScore {
             explicitSeventh = "dom7";
         } else if (isSixthChord) {
             explicitSeventh = isMin ? "min6" : "maj7";
-        } else if (/7|9|11|13/.test(extPart)) {
+        } else if (/7|9|11|13/.test(extNoAdd)) {
             explicitSeventh = isMin ? "m7" : "dom7";
         }
 
@@ -106,6 +111,7 @@ MuseScore {
             isAug: isAug,
             isMin: isMin,
             isSus: isSus,
+            isAddChord: isAddChord,
             isHalfDim: isHalfDim,
             hasFlat5: hasFlat5,
             hasSharp5: hasSharp5,
@@ -205,6 +211,9 @@ MuseScore {
             seventhOffset = 5;
         } else if (chord.explicitSeventh === "dom7" || chord.explicitSeventh === "m7") {
             seventhOffset = -2;
+        } else if (chord.isAddChord) {
+            seventhOffset = -2;
+            resolvedSeventhType = null;
         } else if (!isOpenKeySig(keySig)) {
             var tonicTpc = 14 + keySig;
             var fifthsFromTonic = chord.rootTpc - tonicTpc;
@@ -1105,8 +1114,42 @@ MuseScore {
             }
         }
 
+        // Treat aug / + / #5 as an explicit command to include the #5 whenever it fits cleanly
+        var sharp5AddedExplicitly = false;
+        if (allowExtraColorTone && chord.hasSharp5 && lhVoicing) {
+            var s5Pc = tpcToPc(tones.fifthTpc);
+            var alreadyHasS5 = false;
+            if ((lhVoicing.bassMidi % 12 === s5Pc) || (lhVoicing.tenorMidi % 12 === s5Pc)) {
+                alreadyHasS5 = true;
+            }
+            for (var rCheck = 0; rCheck < rhNotesSpec.length; rCheck++) {
+                if ((rhNotesSpec[rCheck].pitch % 12) === s5Pc) {
+                    alreadyHasS5 = true;
+                    break;
+                }
+            }
+            if (!alreadyHasS5 && !conflictsWithMelodyAlteration(tones.fifthTpc, chord, barMelodyInfo)) {
+                var s5Floor = Math.max(lhVoicing.tenorMidi + 2, (rhNotesSpec.length > 0 ? rhNotesSpec[0].pitch + 1 : lhVoicing.tenorMidi + 2));
+                var s5Pitch = placeRhPitchNearMelody(s5Pc, s5Floor, rhCeiling, barMelodyInfo.highestMidi);
+                if (s5Pitch === -1) {
+                    var s5Alt = placePcAtOrBelow(s5Pc, rhCeiling);
+                    if (s5Alt >= lhVoicing.tenorMidi + 2 && s5Alt <= rhCeiling) {
+                        var dupPitch = false;
+                        for (var dCheck = 0; dCheck < rhNotesSpec.length; dCheck++) {
+                            if (rhNotesSpec[dCheck].pitch === s5Alt) dupPitch = true;
+                        }
+                        if (!dupPitch) s5Pitch = s5Alt;
+                    }
+                }
+                if (s5Pitch !== -1 && s5Pitch <= rhCeiling) {
+                    rhNotesSpec.push({ pitch: s5Pitch, tpc: tones.fifthTpc });
+                    sharp5AddedExplicitly = true;
+                }
+            }
+        }
+
         var forceAboveOrientation = isSameRootSeq ? prevRhColorAbove : null;
-        if (allowExtraColorTone && rhPrimaryRole !== null && rhTargetTpc !== null) {
+        if (allowExtraColorTone && !sharp5AddedExplicitly && rhPrimaryRole !== null && rhTargetTpc !== null) {
             if (rhNotesSpec.length === 1) {
                 var colorNote = selectRhColorNote(
                     chord,
@@ -1912,8 +1955,6 @@ MuseScore {
         }
     }
 
-    // Write a single sequential moving voice in targetVoice starting from measureStartTick,
-    // advancing naturally via cursor.addNote() so splitTick never falls back onto Voice 0!
     function writeSequentialMotionVoice(cursor, staffIdx, targetVoice, mStart, cStart, firstNote, d1, secondNote, d2) {
         cursor.staffIdx = staffIdx;
         cursor.voice = 0;
@@ -1926,10 +1967,8 @@ MuseScore {
             cursor.addRest();
         }
 
-        // Write firstNote (duration d1)
         cursor.setDuration(d1, 1920);
         cursor.addNote(firstNote.pitch, false);
-        // Spell firstNote via a fresh lookup on targetVoice at cStart
         cursor.staffIdx = staffIdx;
         cursor.voice = targetVoice;
         cursor.rewindToTick(cStart);
@@ -1938,10 +1977,8 @@ MuseScore {
             el1.notes[0].tpc1 = firstNote.tpc;
             el1.notes[0].tpc2 = firstNote.tpc;
         }
-        // Advance cursor to splitTick (cStart + d1)
         cursor.next();
 
-        // Write secondNote (duration d2) directly at the advanced cursor position
         cursor.setDuration(d2, 1920);
         cursor.addNote(secondNote.pitch, false);
         cursor.staffIdx = staffIdx;
