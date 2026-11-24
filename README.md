@@ -29,6 +29,12 @@ Here is an example of its output:
 
 ![Jazz piano accompaniment screenshot](screenshot.png)
 
+## How It Works
+
+For more information on the principles used in this plugin
+(which are also good guidelines for *any* jazz pianist),
+see [Behind the Voicings](behind-the-voicings.md).
+
 ## Credits
 
 - Created by Marc Sabatella ([Outside Shore Music](https://outsideshore.com)).
